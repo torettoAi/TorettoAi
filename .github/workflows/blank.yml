@@ -1,39 +1,35 @@
-
-name: Build Toretto AI APK
-
-on:
-  workflow_dispatch:
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Скачать исходный код
-        uses: actions/checkout@v4
-
-      - name: Распаковать и проверить проект
-        run: |
-          set -e
-          mkdir -p extracted
-          unzip -o TorettoAI-source.zip -d extracted
-          echo "=== Содержимое архива ==="
-          find extracted -maxdepth 4 -type f | head -200
-          echo "=== Файлы сборки Android ==="
-          find extracted -type f \( \
-            -name gradlew -o \
-            -name settings.gradle -o \
-            -name settings.gradle.kts -o \
-            -name build.gradle -o \
-            -name build.gradle.kts -o \
-            -name AndroidManifest.xml \
-          \) -print
-
-      - name: Сохранить распакованные исходники
-        uses: actions/upload-artifact@v4
-        with:
-          name: TorettoAI-source-inspection
-          path: extracted/
-          if-no-files-found: error
-          retention-days: 7
-          
+0s
+Run set -e
+Archive:  TorettoAI-source.zip
+   creating: extracted/TorettoAI/
+   creating: extracted/TorettoAI/.github/
+   creating: extracted/TorettoAI/.github/workflows/
+  inflating: extracted/TorettoAI/.github/workflows/android-apk.yml  
+  inflating: extracted/TorettoAI/settings.gradle.kts  
+   creating: extracted/TorettoAI/app/
+  inflating: extracted/TorettoAI/app/build.gradle.kts  
+   creating: extracted/TorettoAI/app/src/
+   creating: extracted/TorettoAI/app/src/main/
+   creating: extracted/TorettoAI/app/src/main/java/
+   creating: extracted/TorettoAI/app/src/main/java/ru/
+   creating: extracted/TorettoAI/app/src/main/java/ru/torettocraft/
+   creating: extracted/TorettoAI/app/src/main/java/ru/torettocraft/ai/
+  inflating: extracted/TorettoAI/app/src/main/java/ru/torettocraft/ai/MainActivity.kt  
+  inflating: extracted/TorettoAI/app/src/main/AndroidManifest.xml  
+   creating: extracted/TorettoAI/app/src/main/res/
+   creating: extracted/TorettoAI/app/src/main/res/values/
+  inflating: extracted/TorettoAI/build.gradle.kts  
+  inflating: extracted/TorettoAI/gradle.properties  
+  inflating: extracted/TorettoAI/README_RU.md  
+=== Содержимое архива ===
+extracted/TorettoAI/settings.gradle.kts
+extracted/TorettoAI/app/build.gradle.kts
+extracted/TorettoAI/.github/workflows/android-apk.yml
+extracted/TorettoAI/build.gradle.kts
+extracted/TorettoAI/README_RU.md
+extracted/TorettoAI/gradle.properties
+=== Файлы сборки Android ===
+extracted/TorettoAI/settings.gradle.kts
+extracted/TorettoAI/app/src/main/AndroidManifest.xml
+extracted/TorettoAI/app/build.gradle.kts
+extracted/TorettoAI/build.gradle.kts
