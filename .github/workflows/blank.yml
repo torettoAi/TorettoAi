@@ -1,0 +1,22 @@
+name: Build Toretto AI APK
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Скачать исходный код
+        uses: actions/checkout@v4
+
+      - name: Проверить содержимое репозитория
+        run: |
+          echo "Файлы репозитория:"
+          ls -la
+          echo "Поиск ZIP-архивов:"
+          find . -maxdepth 3 -type f -iname "*.zip" -print
+          echo "Поиск Android-проектов:"
+          find . -maxdepth 4 -type f \( -name "gradlew" -o -name "settings.gradle" -o -name "settings.gradle.kts" -o -name "build.gradle" -o -name "build.gradle.kts" \) -print
+          
