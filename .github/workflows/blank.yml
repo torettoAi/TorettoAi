@@ -1,3 +1,4 @@
+
 name: Build Toretto AI APK
 
 on:
@@ -11,12 +12,28 @@ jobs:
       - name: Скачать исходный код
         uses: actions/checkout@v4
 
-      - name: Проверить содержимое репозитория
+      - name: Распаковать и проверить проект
         run: |
-          echo "Файлы репозитория:"
-          ls -la
-          echo "Поиск ZIP-архивов:"
-          find . -maxdepth 3 -type f -iname "*.zip" -print
-          echo "Поиск Android-проектов:"
-          find . -maxdepth 4 -type f \( -name "gradlew" -o -name "settings.gradle" -o -name "settings.gradle.kts" -o -name "build.gradle" -o -name "build.gradle.kts" \) -print
+          set -e
+          mkdir -p extracted
+          unzip -o TorettoAI-source.zip -d extracted
+          echo "=== Содержимое архива ==="
+          find extracted -maxdepth 4 -type f | head -200
+          echo "=== Файлы сборки Android ==="
+          find extracted -type f \( \
+            -name gradlew -o \
+            -name settings.gradle -o \
+            -name settings.gradle.kts -o \
+            -name build.gradle -o \
+            -name build.gradle.kts -o \
+            -name AndroidManifest.xml \
+          \) -print
+
+      - name: Сохранить распакованные исходники
+        uses: actions/upload-artifact@v4
+        with:
+          name: TorettoAI-source-inspection
+          path: extracted/
+          if-no-files-found: error
+          retention-days: 7
           
