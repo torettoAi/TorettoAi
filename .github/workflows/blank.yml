@@ -26,6 +26,9 @@ jobs:
       - name: Настроить Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Принять лицензии Android SDK
+        run: yes | sdkmanager --licenses
+
       - name: Распаковать проект
         run: |
           set -e
