@@ -24,10 +24,9 @@ jobs:
           gradle-version: '8.9'
 
       - name: Настроить Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Принять лицензии Android SDK
-        run: yes | sdkmanager --licenses
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools'
 
       - name: Распаковать проект
         run: |
