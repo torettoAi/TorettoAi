@@ -5,13 +5,14 @@ workflow_dispatch:
 
 jobs:
 build:
+name: Сборка Android APK
 runs-on: ubuntu-latest
 
 steps:
   - name: Скачать исходный код
     uses: actions/checkout@v4
 
-  - name: Установить Java
+  - name: Установить Java 17
     uses: actions/setup-java@v4
     with:
       distribution: temurin
@@ -27,22 +28,79 @@ steps:
     with:
       packages: 'platform-tools'
 
-  - name: Распаковать проект
+  - name: Проверить и распаковать исходники
+    shell: bash
     run: |
-      set -e
+      set -euo pipefail
+      test -f TorettoAI-source.zip
+      mkdir -p extracted
       unzip -o TorettoAI-source.zip -d extracted
+      test -f extracted/TorettoAI/app/build.gradle.kts
+      test -f extracted/TorettoAI/settings.gradle.kts
+      echo "Исходники найдены."
 
-  - name: Исправить настройки Java и Kotlin
+  - name: Исправить совместимость Java и Kotlin
+    shell: bash
     run: |
       python3 - <<'PY'
       from pathlib import Path
       import re
 
       p = Path("extracted/TorettoAI/app/build.gradle.kts")
-      if not p.exists():
-          raise SystemExit(f"Не найден файл проекта: {p}")
-
       s = p.read_text()
+
+      def update_block(text, name, body):
+          pattern = re.compile(
+              r'(?m)^([ \t]*)' + re.escape(name) + r'\s*\{'
+          )
+          match = pattern.search(text)
+
+          if match:
+              start = match.start()
+              brace = text.find("{", match.start())
+              depth = 0
+              end = None
+
+              for i in range(brace, len(text)):
+                  if text[i] == "{":
+                      depth += 1
+                  elif text[i] == "}":
+                      depth -= 1
+                      if depth == 0:
+                          end = i + 1
+                          break
+
+              if end is None:
+                  raise SystemExit(
+                      f"Не удалось найти конец блока {name}"
+                  )
+
+              indent = match.group(1)
+              replacement = (
+                  indent + name + " {\n" +
+                  "\n".join(
+                      indent + "    " + line
+                      for line in body.splitlines()
+                  ) +
+                  "\n" + indent + "}"
+              )
+              return text[:start] + replacement + text[end:]
+
+          android = re.search(r'(?m)^([ \t]*)android\s*\{', text)
+          if not android:
+              raise SystemExit("Не найден блок android {}")
+
+          indent = android.group(1) + "    "
+          addition = (
+              "\n" + indent + name + " {\n" +
+              "\n".join(
+                  indent + "    " + line
+                  for line in body.splitlines()
+              ) +
+              "\n" + indent + "}\n"
+          )
+          pos = android.end()
+          return text[:pos] + addition + text[pos:]
 
       s = re.sub(
           r'JavaVersion\.VERSION_1_8',
@@ -55,57 +113,30 @@ steps:
           s
       )
 
-      if 'compileOptions {' in s:
-          s = re.sub(
-              r'compileOptions\s*\{.*?\}',
-              '''compileOptions {
-                  sourceCompatibility = JavaVersion.VERSION_17
-                  targetCompatibility = JavaVersion.VERSION_17
-              }''',
-              s,
-              count=1,
-              flags=re.S
-          )
-      else:
-          s = s.replace(
-              'android {',
-              '''android {
-                  compileOptions {
-                      sourceCompatibility = JavaVersion.VERSION_17
-                      targetCompatibility = JavaVersion.VERSION_17
-                  }''',
-              1
-          )
+      s = update_block(
+          s,
+          "compileOptions",
+          """sourceCompatibility = JavaVersion.VERSION_17
+      targetCompatibility = JavaVersion.VERSION_17"""
+      )
 
-      if 'kotlinOptions {' in s:
-          s = re.sub(
-              r'kotlinOptions\s*\{.*?\}',
-              '''kotlinOptions {
-                  jvmTarget = "17"
-              }''',
-              s,
-              count=1,
-              flags=re.S
-          )
-      else:
-          s = s.replace(
-              'android {',
-              '''android {
-                  kotlinOptions {
-                      jvmTarget = "17"
-                  }''',
-              1
-          )
+      s = update_block(
+          s,
+          "kotlinOptions",
+          """jvmTarget = "17" """
+      )
 
       p.write_text(s)
-      print("Настройки Java и Kotlin обновлены.")
+      print("Обновлён файл:", p)
       print(s)
       PY
 
   - name: Собрать APK
+    shell: bash
     run: |
+      set -euo pipefail
       cd extracted/TorettoAI
-      gradle assembleDebug
+      gradle --no-daemon assembleDebug
 
   - name: Сохранить APK
     uses: actions/upload-artifact@v4
