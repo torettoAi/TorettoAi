@@ -33,6 +33,33 @@ jobs:
           unzip -o TorettoAI-source.zip -d extracted
 
       - name: Исправить совместимость Java и Kotlin
+      
+      - name: Принудительно установить Java 17
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path("extracted/TorettoAI/app/build.gradle.kts")
+          s = p.read_text()
+
+          marker = "android {"
+          if marker not in s:
+              raise SystemExit("Не найден блок android в build.gradle.kts")
+
+          settings = """
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+              kotlinOptions {
+                  jvmTarget = "17"
+              }
+          """
+
+          s = s.replace(marker, marker + "\n" + settings, 1)
+          p.write_text(s)
+          print("Добавлены настройки Java 17 и Kotlin 17")
+          PY
         run: |
           python3 - <<'PY'
           from pathlib import Path
