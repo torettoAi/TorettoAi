@@ -1,147 +1,143 @@
 name: Build Toretto AI APK
 
-on:
-workflow_dispatch:
+'on':
+  workflow_dispatch:
 
 jobs:
-build:
-name: Сборка Android APK
-runs-on: ubuntu-latest
+  build:
+    name: Сборка Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Скачать исходный код
+        uses: actions/checkout@v4
 
-steps:
-  - name: Скачать исходный код
-    uses: actions/checkout@v4
+      - name: Установить Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
 
-  - name: Установить Java 17
-    uses: actions/setup-java@v4
-    with:
-      distribution: temurin
-      java-version: '17'
+      - name: Настроить Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
 
-  - name: Настроить Gradle
-    uses: gradle/actions/setup-gradle@v4
-    with:
-      gradle-version: '8.9'
+      - name: Настроить Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools'
 
-  - name: Настроить Android SDK
-    uses: android-actions/setup-android@v4
-    with:
-      packages: 'platform-tools'
+      - name: Проверить и распаковать исходники
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f TorettoAI-source.zip
+          mkdir -p extracted
+          unzip -o TorettoAI-source.zip -d extracted
+          test -f extracted/TorettoAI/app/build.gradle.kts
+          test -f extracted/TorettoAI/settings.gradle.kts
+          echo "Исходники найдены."
 
-  - name: Проверить и распаковать исходники
-    shell: bash
-    run: |
-      set -euo pipefail
-      test -f TorettoAI-source.zip
-      mkdir -p extracted
-      unzip -o TorettoAI-source.zip -d extracted
-      test -f extracted/TorettoAI/app/build.gradle.kts
-      test -f extracted/TorettoAI/settings.gradle.kts
-      echo "Исходники найдены."
+      - name: Исправить совместимость Java и Kotlin
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
 
-  - name: Исправить совместимость Java и Kotlin
-    shell: bash
-    run: |
-      python3 - <<'PY'
-      from pathlib import Path
-      import re
+          p = Path("extracted/TorettoAI/app/build.gradle.kts")
+          s = p.read_text()
 
-      p = Path("extracted/TorettoAI/app/build.gradle.kts")
-      s = p.read_text()
+          # Обновляем Java 8 на Java 17, если эти значения заданы явно.
+          s = s.replace("JavaVersion.VERSION_1_8", "JavaVersion.VERSION_17")
+          s = re.sub(r"JavaVersion\.VERSION_8\b", "JavaVersion.VERSION_17", s)
 
-      def update_block(text, name, body):
-          pattern = re.compile(
-              r'(?m)^([ \t]*)' + re.escape(name) + r'\s*\{'
-          )
-          match = pattern.search(text)
+          # Проверяем, что блок android существует.
+          if not re.search(r"(?m)^\s*android\s*\{", s):
+              raise SystemExit("Не найден блок android {} в app/build.gradle.kts")
 
-          if match:
-              start = match.start()
-              brace = text.find("{", match.start())
+          # Согласуем параметры Java, добавляя/заменяя свойства внутри compileOptions.
+          m = re.search(r"(?m)^(\s*)compileOptions\s*\{", s)
+          if m:
+              start = m.start()
+              brace = s.find("{", m.start())
               depth = 0
               end = None
-
-              for i in range(brace, len(text)):
-                  if text[i] == "{":
+              for i in range(brace, len(s)):
+                  if s[i] == "{":
                       depth += 1
-                  elif text[i] == "}":
+                  elif s[i] == "}":
                       depth -= 1
                       if depth == 0:
                           end = i + 1
                           break
-
               if end is None:
-                  raise SystemExit(
-                      f"Не удалось найти конец блока {name}"
-                  )
-
-              indent = match.group(1)
-              replacement = (
-                  indent + name + " {\n" +
-                  "\n".join(
-                      indent + "    " + line
-                      for line in body.splitlines()
-                  ) +
-                  "\n" + indent + "}"
+                  raise SystemExit("Не удалось разобрать блок compileOptions")
+              indent = m.group(1)
+              block = (
+                  indent + "compileOptions {\n"
+                  + indent + "    sourceCompatibility = JavaVersion.VERSION_17\n"
+                  + indent + "    targetCompatibility = JavaVersion.VERSION_17\n"
+                  + indent + "}"
               )
-              return text[:start] + replacement + text[end:]
+              s = s[:start] + block + s[end:]
+          else:
+              m = re.search(r"(?m)^([ \t]*)android\s*\{", s)
+              indent = m.group(1) + "    "
+              insert = (
+                  "\n" + indent + "compileOptions {\n"
+                  + indent + "    sourceCompatibility = JavaVersion.VERSION_17\n"
+                  + indent + "    targetCompatibility = JavaVersion.VERSION_17\n"
+                  + indent + "}\n"
+              )
+              s = s[:m.end()] + insert + s[m.end():]
 
-          android = re.search(r'(?m)^([ \t]*)android\s*\{', text)
-          if not android:
-              raise SystemExit("Не найден блок android {}")
+          # Для Kotlin Gradle Plugin старого формата выставляем jvmTarget = 17.
+          m = re.search(r"(?m)^(\s*)kotlinOptions\s*\{", s)
+          if m:
+              start = m.start()
+              brace = s.find("{", m.start())
+              depth = 0
+              end = None
+              for i in range(brace, len(s)):
+                  if s[i] == "{":
+                      depth += 1
+                  elif s[i] == "}":
+                      depth -= 1
+                      if depth == 0:
+                          end = i + 1
+                          break
+              if end is None:
+                  raise SystemExit("Не удалось разобрать блок kotlinOptions")
+              indent = m.group(1)
+              block = indent + 'kotlinOptions {\n' + indent + '    jvmTarget = "17"\n' + indent + '}'
+              s = s[:start] + block + s[end:]
+          else:
+              m = re.search(r"(?m)^([ \t]*)android\s*\{", s)
+              indent = m.group(1) + "    "
+              insert = (
+                  "\n" + indent + "kotlinOptions {\n"
+                  + indent + '    jvmTarget = "17"\n'
+                  + indent + "}\n"
+              )
+              s = s[:m.end()] + insert + s[m.end():]
 
-          indent = android.group(1) + "    "
-          addition = (
-              "\n" + indent + name + " {\n" +
-              "\n".join(
-                  indent + "    " + line
-                  for line in body.splitlines()
-              ) +
-              "\n" + indent + "}\n"
-          )
-          pos = android.end()
-          return text[:pos] + addition + text[pos:]
+          p.write_text(s)
+          print("Настройки Java/Kotlin обновлены.")
+          PY
 
-      s = re.sub(
-          r'JavaVersion\.VERSION_1_8',
-          'JavaVersion.VERSION_17',
-          s
-      )
-      s = re.sub(
-          r'JavaVersion\.VERSION_8\b',
-          'JavaVersion.VERSION_17',
-          s
-      )
+      - name: Собрать APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd extracted/TorettoAI
+          gradle --no-daemon assembleDebug
 
-      s = update_block(
-          s,
-          "compileOptions",
-          """sourceCompatibility = JavaVersion.VERSION_17
-      targetCompatibility = JavaVersion.VERSION_17"""
-      )
-
-      s = update_block(
-          s,
-          "kotlinOptions",
-          """jvmTarget = "17" """
-      )
-
-      p.write_text(s)
-      print("Обновлён файл:", p)
-      print(s)
-      PY
-
-  - name: Собрать APK
-    shell: bash
-    run: |
-      set -euo pipefail
-      cd extracted/TorettoAI
-      gradle --no-daemon assembleDebug
-
-  - name: Сохранить APK
-    uses: actions/upload-artifact@v4
-    with:
-      name: TorettoAI-debug-apk
-      path: extracted/TorettoAI/app/build/outputs/apk/debug/*.apk
-      if-no-files-found: error
-      retention-days: 7
+      - name: Сохранить APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: TorettoAI-debug-apk
+          path: extracted/TorettoAI/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 7
