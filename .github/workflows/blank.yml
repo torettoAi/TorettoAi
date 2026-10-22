@@ -1,117 +1,116 @@
 name: Build Toretto AI APK
 
 on:
-  workflow_dispatch:
+workflow_dispatch:
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+build:
+runs-on: ubuntu-latest
 
-    steps:
-      - name: Скачать исходный код
-        uses: actions/checkout@v4
+steps:
+  - name: Скачать исходный код
+    uses: actions/checkout@v4
 
-      - name: Установить Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
+  - name: Установить Java
+    uses: actions/setup-java@v4
+    with:
+      distribution: temurin
+      java-version: '17'
 
-      - name: Настроить Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.9'
+  - name: Настроить Gradle
+    uses: gradle/actions/setup-gradle@v4
+    with:
+      gradle-version: '8.9'
 
-      - name: Настроить Android SDK
-        uses: android-actions/setup-android@v4
-        with:
-          packages: 'platform-tools'
+  - name: Настроить Android SDK
+    uses: android-actions/setup-android@v4
+    with:
+      packages: 'platform-tools'
 
-      - name: Распаковать проект
-        run: |
-          set -e
-          unzip -o TorettoAI-source.zip -d extracted
+  - name: Распаковать проект
+    run: |
+      set -e
+      unzip -o TorettoAI-source.zip -d extracted
 
-      - name: Исправить совместимость Java и Kotlin
-      
-      - name: Принудительно установить Java 17
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
+  - name: Исправить настройки Java и Kotlin
+    run: |
+      python3 - <<'PY'
+      from pathlib import Path
+      import re
 
-          p = Path("extracted/TorettoAI/app/build.gradle.kts")
-          s = p.read_text()
+      p = Path("extracted/TorettoAI/app/build.gradle.kts")
+      if not p.exists():
+          raise SystemExit(f"Не найден файл проекта: {p}")
 
-          marker = "android {"
-          if marker not in s:
-              raise SystemExit("Не найден блок android в build.gradle.kts")
+      s = p.read_text()
 
-          settings = """
-              compileOptions {
+      s = re.sub(
+          r'JavaVersion\.VERSION_1_8',
+          'JavaVersion.VERSION_17',
+          s
+      )
+      s = re.sub(
+          r'JavaVersion\.VERSION_8\b',
+          'JavaVersion.VERSION_17',
+          s
+      )
+
+      if 'compileOptions {' in s:
+          s = re.sub(
+              r'compileOptions\s*\{.*?\}',
+              '''compileOptions {
                   sourceCompatibility = JavaVersion.VERSION_17
                   targetCompatibility = JavaVersion.VERSION_17
-              }
-              kotlinOptions {
+              }''',
+              s,
+              count=1,
+              flags=re.S
+          )
+      else:
+          s = s.replace(
+              'android {',
+              '''android {
+                  compileOptions {
+                      sourceCompatibility = JavaVersion.VERSION_17
+                      targetCompatibility = JavaVersion.VERSION_17
+                  }''',
+              1
+          )
+
+      if 'kotlinOptions {' in s:
+          s = re.sub(
+              r'kotlinOptions\s*\{.*?\}',
+              '''kotlinOptions {
                   jvmTarget = "17"
-              }
-          """
-
-          s = s.replace(marker, marker + "\n" + settings, 1)
-          p.write_text(s)
-          print("Добавлены настройки Java 17 и Kotlin 17")
-          PY
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
-
-          p = Path("extracted/TorettoAI/app/build.gradle.kts")
-          if not p.exists():
-              raise SystemExit(f"Не найден файл: {p}")
-
-          s = p.read_text()
-
-          s = re.sub(
-              r'JavaVersion\.VERSION_1_8',
-              'JavaVersion.VERSION_17',
-              s
+              }''',
+              s,
+              count=1,
+              flags=re.S
           )
-          s = re.sub(
-              r'JavaVersion\.VERSION_8\b',
-              'JavaVersion.VERSION_17',
-              s
-          )
-          s = re.sub(
-              r'(sourceCompatibility|targetCompatibility)\s*=\s*JavaVersion\.VERSION_1_8',
-              r'\1 = JavaVersion.VERSION_17',
-              s
+      else:
+          s = s.replace(
+              'android {',
+              '''android {
+                  kotlinOptions {
+                      jvmTarget = "17"
+                  }''',
+              1
           )
 
-          p.write_text(s)
-          print("Настройки Java обновлены, если использовалась Java 8.")
-          print(s)
-          PY
+      p.write_text(s)
+      print("Настройки Java и Kotlin обновлены.")
+      print(s)
+      PY
 
-      - name: Показать настройки проекта
-        run: |
-          cd extracted/TorettoAI
-          echo "=== Корневые настройки ==="
-          cat build.gradle.kts
-          echo "=== Настройки приложения ==="
-          cat app/build.gradle.kts
-          echo "=== Настройки проекта ==="
-          cat settings.gradle.kts
+  - name: Собрать APK
+    run: |
+      cd extracted/TorettoAI
+      gradle assembleDebug
 
-      - name: Собрать APK
-        run: |
-          cd extracted/TorettoAI
-          gradle assembleDebug
-
-      - name: Сохранить APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: TorettoAI-debug-apk
-          path: extracted/TorettoAI/app/build/outputs/apk/debug/*.apk
-          if-no-files-found: error
-          retention-days: 7
-          
+  - name: Сохранить APK
+    uses: actions/upload-artifact@v4
+    with:
+      name: TorettoAI-debug-apk
+      path: extracted/TorettoAI/app/build/outputs/apk/debug/*.apk
+      if-no-files-found: error
+      retention-days: 7
